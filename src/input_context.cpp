@@ -633,6 +633,7 @@ keybindings_ui::keybindings_ui( bool permit_execute_action,
     legend.push_back( colorize( _( "Keybinding active only on this screen" ), local_key ) );
     legend.push_back( colorize( _( "Keybinding active globally" ), global_key ) );
     legend.push_back( colorize( _( "* User customized" ), global_key ) );
+    legend.push_back( _( "Filter tips: prefix ~ for fuzzy; use id: and key: to search action ids or assigned keys." ) );
     if( permit_execute_action ) {
         legend.push_back( string_format(
                               _( "Press %c to execute action\n" ),
@@ -739,6 +740,12 @@ void keybindings_ui::draw_controls()
                                               col, 0.0f,
                                               status == kb_menu_status::show ? nullptr : &is_selected,
                                               nullptr, &is_hovered );
+
+                if( is_hovered ) {
+                    ImGui::BeginTooltip();
+                    ImGui::Text( "%s", string_format( _( "Action id: %s" ), action_id ).c_str() );
+                    ImGui::EndTooltip();
+                }
 
                 ImGui::TableSetColumnIndex( 3 );
                 ImGui::Text( "%s", ctxt->get_desc( action_id ).c_str() );
@@ -1300,11 +1307,187 @@ void input_context::set_iso( bool mode )
 std::vector<std::string> input_context::filter_strings_by_phrase(
     const std::vector<std::string> &strings, std::string_view phrase ) const
 {
-    std::vector<std::string> filtered_strings;
+    auto trim = []( std::string_view &sv ) {
+        while( !sv.empty() && std::isspace( static_cast<unsigned char>( sv.front() ) ) ) {
+            sv.remove_prefix( 1 );
+        }
+        while( !sv.empty() && std::isspace( static_cast<unsigned char>( sv.back() ) ) ) {
+            sv.remove_suffix( 1 );
+        }
+    };
 
-    for( const std::string &str : strings ) {
-        if( lcmatch( remove_color_tags( get_action_name( str ) ), phrase ) ) {
-            filtered_strings.push_back( str );
+    std::string_view view = phrase;
+    trim( view );
+
+    bool fuzzy = false;
+    if( !view.empty() && view.front() == '~' ) {
+        fuzzy = true;
+        view.remove_prefix( 1 );
+        trim( view );
+    }
+
+    enum class filter_field {
+        any,
+        id,
+        key,
+    };
+    struct filter_term {
+        filter_field field = filter_field::any;
+        bool exclude = false;
+        std::string_view text;
+    };
+
+    std::vector<filter_term> terms;
+    bool need_keys = false;
+
+    // Split on whitespace into terms, allowing '-' exclusions and field prefixes.
+    size_t pos = 0;
+    while( pos < view.size() ) {
+        while( pos < view.size() && std::isspace( static_cast<unsigned char>( view[pos] ) ) ) {
+            pos++;
+        }
+        if( pos >= view.size() ) {
+            break;
+        }
+        const size_t start = pos;
+        while( pos < view.size() && !std::isspace( static_cast<unsigned char>( view[pos] ) ) ) {
+            pos++;
+        }
+        std::string_view token = view.substr( start, pos - start );
+        if( token.empty() ) {
+            continue;
+        }
+
+        filter_term term;
+        if( token.front() == '-' ) {
+            term.exclude = true;
+            token.remove_prefix( 1 );
+        }
+
+        const auto starts_with_ci = []( std::string_view s, std::string_view prefix ) {
+            if( s.size() < prefix.size() ) {
+                return false;
+            }
+            for( size_t i = 0; i < prefix.size(); i++ ) {
+                const unsigned char a = static_cast<unsigned char>( s[i] );
+                const unsigned char b = static_cast<unsigned char>( prefix[i] );
+                if( std::tolower( a ) != std::tolower( b ) ) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        if( starts_with_ci( token, "id:" ) ) {
+            term.field = filter_field::id;
+            token.remove_prefix( 3 );
+        } else if( starts_with_ci( token, "key:" ) ) {
+            term.field = filter_field::key;
+            token.remove_prefix( 4 );
+            need_keys = true;
+        } else {
+            term.field = filter_field::any;
+        }
+
+        if( token.empty() ) {
+            // Ignore empty terms like "-" or "id:".
+            continue;
+        }
+
+        term.text = token;
+        terms.push_back( term );
+    }
+
+    if( terms.empty() ) {
+        return strings;
+    }
+
+    struct scored_match {
+        std::string id;
+        int score = 0;
+    };
+
+    std::vector<std::string> filtered_strings;
+    std::vector<scored_match> scored;
+    filtered_strings.reserve( strings.size() );
+    scored.reserve( strings.size() );
+
+    for( const std::string &action_id : strings ) {
+        const std::string action_name = remove_color_tags( get_action_name( action_id ) );
+        std::string key_desc;
+        if( need_keys ) {
+            key_desc = get_desc( action_id );
+        }
+
+        int total_score = 0;
+        bool keep = true;
+
+        for( const filter_term &term : terms ) {
+            auto match_field = [&]( std::string_view haystack ) -> std::optional<int> {
+                if( fuzzy ) {
+                    return fuzzy_match_score( haystack, term.text );
+                } else {
+                    return lcmatch( haystack, term.text ) ? std::optional<int>( 1 ) : std::nullopt;
+                }
+            };
+
+            std::optional<int> best;
+            switch( term.field ) {
+                case filter_field::id:
+                    best = match_field( action_id );
+                    break;
+                case filter_field::key:
+                    best = match_field( key_desc );
+                    break;
+                case filter_field::any: {
+                    // Search action name first, then action id.
+                    std::optional<int> name_score = match_field( action_name );
+                    std::optional<int> id_score = match_field( action_id );
+                    if( name_score && id_score ) {
+                        best = std::max( *name_score, *id_score );
+                    } else {
+                        best = name_score ? name_score : id_score;
+                    }
+                    break;
+                }
+            }
+
+            const bool matched = best.has_value();
+
+            if( term.exclude ) {
+                if( matched ) {
+                    keep = false;
+                    break;
+                }
+            } else {
+                if( !matched ) {
+                    keep = false;
+                    break;
+                }
+                if( fuzzy ) {
+                    total_score += *best;
+                }
+            }
+        }
+
+        if( !keep ) {
+            continue;
+        }
+
+        if( fuzzy ) {
+            scored.push_back( { action_id, total_score } );
+        } else {
+            filtered_strings.push_back( action_id );
+        }
+    }
+
+    if( fuzzy ) {
+        std::stable_sort( scored.begin(), scored.end(), []( const scored_match &a, const scored_match &b ) {
+            return a.score > b.score;
+        } );
+        filtered_strings.reserve( scored.size() );
+        for( scored_match &m : scored ) {
+            filtered_strings.push_back( std::move( m.id ) );
         }
     }
 

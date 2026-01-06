@@ -470,14 +470,26 @@ class input_context
          * @param events The input events to be cleared from conflicting actions
          * @return true if cleared (user agreed) or if no conflicts found
          */
-        bool resolve_conflicts( const std::vector<input_event> &events, const std::string &ignore_action );
-        /**
-         * Filter a vector of strings by a phrase, returning only strings that contain the phrase.
-         *
-         * @param strings The vector of strings to filter
-         * @param phrase  The phrase to search within each of the given strings
-         * @return A vector of the filtered strings
-         */
+        bool resolve_conflicts( const std::vector<input_event> &events, const std::string &ignore_action );/**
+ * Filter a vector of action IDs by a user-entered search phrase.
+ *
+ * By default this performs a case-insensitive substring match (see lcmatch()) against:
+ *  - the action's translated name, and
+ *  - the action id itself.
+ *
+ * The phrase is split on whitespace into terms.  All non-excluded terms must match.
+ * Terms prefixed with '-' are treated as exclusions (if they match, the action is removed).
+ *
+ * Advanced syntax:
+ *  - Prefix the entire phrase with '~' to enable fuzzy matching (subsequence match) and
+ *    rank results by match quality.
+ *  - Prefix a term with 'id:' to match only against the action id.
+ *  - Prefix a term with 'key:' to match against the action's currently assigned key(s).
+ *
+ * @param strings The vector of action ids to filter.
+ * @param phrase  The phrase to search within each action.
+ * @return A vector of the filtered action ids (and ranked if fuzzy matching is enabled).
+ */
         std::vector<std::string> filter_strings_by_phrase( const std::vector<std::string> &strings,
                 std::string_view phrase ) const;
 };

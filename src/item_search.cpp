@@ -33,6 +33,16 @@ static const itype_id itype_debug_item_search( "debug_item_search" );
 
 static std::pair<std::string, std::string> get_both( std::string_view a );
 
+static bool match_string_filter( std::string_view haystack, std::string_view needle )
+{
+    // Opt-in fuzzy matching, consistent with uilist (prefix with '~').
+    if( !needle.empty() && needle.front() == '~' ) {
+        needle.remove_prefix( 1 );
+        return fuzzy_match_score( haystack, needle ).has_value();
+    }
+    return lcmatch( haystack, needle );
+}
+
 template<typename Unit>
 static std::function< bool( const item & )> can_contain_filter( std::string_view hint,
         std::string_view filter, Unit max, std::vector<std::pair<std::string, Unit>> units,
@@ -74,14 +84,14 @@ std::function<bool( const item & )> basic_item_filter( std::string filter )
         // category
         case 'c':
             return [filter]( const item & i ) {
-                return lcmatch( i.get_category_of_contents().name_header(), filter );
+                return match_string_filter( i.get_category_of_contents().name_header().translated(), filter );
             };
         // material
         case 'm':
             return [filter]( const item & i ) {
                 return std::any_of( i.made_of().begin(), i.made_of().end(),
                 [&filter]( const std::pair<material_id, int> &mat ) {
-                    return lcmatch( mat.first->name(), filter );
+                    return match_string_filter( mat.first->name().translated(), filter );
                 } );
             };
         // qualities
@@ -101,7 +111,7 @@ std::function<bool( const item & )> basic_item_filter( std::string filter )
             return [filter]( const item & i ) {
                 const auto &components = i.get_uncraft_components();
                 for( const item_comp &component : components ) {
-                    if( lcmatch( component.to_string(), filter ) ) {
+                    if( match_string_filter( component.to_string(), filter ) ) {
                         return true;
                     }
                 }
@@ -111,7 +121,7 @@ std::function<bool( const item & )> basic_item_filter( std::string filter )
         case 'n':
             return [filter]( const item & i ) {
                 const std::string note = i.get_var( "item_note" );
-                return !note.empty() && lcmatch( note, filter );
+                return !note.empty() && match_string_filter( note, filter );
             };
         // item flags, must type in whole flag string name(case insensitive) so as to avoid revealing hidden flags.
         case 'f':
@@ -129,7 +139,7 @@ std::function<bool( const item & )> basic_item_filter( std::string filter )
         case 's':
             return [filter]( const item & i ) {
                 if( get_avatar().has_identified( i.typeId() ) ) {
-                    return lcmatch( i.get_book_skill(), filter );
+                    return match_string_filter( i.get_book_skill(), filter );
                 }
                 return false;
             };
@@ -165,13 +175,13 @@ std::function<bool( const item & )> basic_item_filter( std::string filter )
             std::unordered_set<sub_bodypart_id> filtered_sub_bodyparts;
             for( const body_part &bp : all_body_parts ) {
                 const bodypart_str_id &bp_str_id = convert_bp( bp );
-                if( lcmatch( body_part_name( bp_str_id, 1 ), filter )
-                    || lcmatch( body_part_name( bp_str_id, 2 ), filter ) ) {
+                if( match_string_filter( body_part_name( bp_str_id, 1 ), filter )
+                    || match_string_filter( body_part_name( bp_str_id, 2 ), filter ) ) {
                     filtered_bodyparts.insert( bp_str_id->id );
                 }
                 for( const sub_bodypart_str_id &sbp : bp_str_id->sub_parts ) {
-                    if( lcmatch( sbp->name.translated(), filter )
-                        || lcmatch( sbp->name_multiple.translated(), filter ) ) {
+                    if( match_string_filter( sbp->name.translated(), filter )
+                        || match_string_filter( sbp->name_multiple.translated(), filter ) ) {
                         filtered_sub_bodyparts.insert( sbp->id );
                     }
                 }
@@ -191,7 +201,7 @@ std::function<bool( const item & )> basic_item_filter( std::string filter )
         case 'e': {
             std::unordered_set<layer_level> filtered_layers;
             for( layer_level layer = layer_level( 0 ); layer != layer_level::NUM_LAYER_LEVELS; ++layer ) {
-                if( lcmatch( item::layer_to_string( layer ), filter ) ) {
+                if( match_string_filter( item::layer_to_string( layer ), filter ) ) {
                     filtered_layers.insert( layer );
                 }
             }
@@ -205,7 +215,7 @@ std::function<bool( const item & )> basic_item_filter( std::string filter )
         // by name
         default:
             return [filter]( const item & a ) {
-                return lcmatch( remove_color_tags( a.tname() ), filter );
+                return match_string_filter( remove_color_tags( a.tname() ), filter );
             };
     }
 }
