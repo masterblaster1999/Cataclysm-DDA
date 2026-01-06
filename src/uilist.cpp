@@ -550,46 +550,131 @@ void uilist::filterlist()
     // TODO: && is_all_lc( filter )
     fentries.clear();
     fselected = -1;
-    int f = 0;
+
+    std::string_view effective_filter = filter;
+    bool use_fuzzy = false;
+    if( filtering && !effective_filter.empty() && effective_filter.front() == '~' ) {
+        use_fuzzy = true;
+        effective_filter.remove_prefix( 1 );
+        while( !effective_filter.empty() &&
+               std::isspace( static_cast<unsigned char>( effective_filter.front() ) ) ) {
+            effective_filter.remove_prefix( 1 );
+        }
+    }
+    const bool do_filter = filtering && !effective_filter.empty();
+
+    struct scored_entry {
+        int score;
+        int idx;
+    };
+    std::vector<scored_entry> scored;
+
+    auto matches_substring = [&]( const uilist_entry &entry ) -> bool {
+        const std::string txt = remove_color_tags( entry.txt );
+        const std::string ctxt = remove_color_tags( entry.ctxt );
+        if( filtering_nocase ) {
+            return lcmatch( txt, effective_filter ) || lcmatch( ctxt, effective_filter );
+        } else {
+            return txt.find( effective_filter ) != std::string::npos ||
+                   ctxt.find( effective_filter ) != std::string::npos;
+        }
+    };
+
+    auto get_fuzzy_score = [&]( const uilist_entry &entry ) -> std::optional<int> {
+        // Favor matches in the primary text column over matches in the secondary column.
+        const std::string txt = remove_color_tags( entry.txt );
+        const std::string ctxt = remove_color_tags( entry.ctxt );
+
+        std::optional<int> best;
+        if( const std::optional<int> s = fuzzy_match_score( txt, effective_filter ); s ) {
+            best = *s + 50;
+        }
+        if( const std::optional<int> s = fuzzy_match_score( ctxt, effective_filter ); s ) {
+            best = best ? std::max( *best, *s ) : *s;
+        }
+        return best;
+    };
+
     for( size_t i = 0; i < entries.size(); i++ ) {
-        bool visible = true;
         if( !categories.empty() && !category_filter( entries[i], categories[current_category].first ) ) {
             continue;
         }
-        if( filtering && !filter.empty() ) {
-            if( filtering_nocase ) {
-                // case-insensitive match
-                visible = lcmatch( entries[i].txt, filter );
-            } else {
-                // case-sensitive match
-                visible = entries[i].txt.find( filter ) != std::string::npos;
+
+        if( !do_filter ) {
+            fentries.push_back( static_cast<int>( i ) );
+            continue;
+        }
+
+        if( use_fuzzy ) {
+            if( const std::optional<int> score = get_fuzzy_score( entries[i] ); score ) {
+                scored.push_back( { *score, static_cast<int>( i ) } );
+            }
+        } else {
+            if( matches_substring( entries[i] ) ) {
+                fentries.push_back( static_cast<int>( i ) );
             }
         }
-        if( visible ) {
-            fentries.push_back( static_cast<int>( i ) );
-            if( hilight_disabled || entries[i].enabled ) {
-                if( static_cast<int>( i ) == selected || ( static_cast<int>( i ) > selected && fselected == -1 ) ) {
-                    // Either this is selected, or we are past the previously selected entry,
-                    // which has been filtered out, so choose another nearby entry instead.
-                    fselected = f;
+    }
+
+    if( use_fuzzy && do_filter ) {
+        std::stable_sort( scored.begin(), scored.end(), []( const scored_entry &a, const scored_entry &b ) {
+            return a.score > b.score;
+        } );
+        fentries.reserve( scored.size() );
+        for( const scored_entry &e : scored ) {
+            fentries.push_back( e.idx );
+        }
+    }
+
+    auto entry_is_selectable = [&]( int idx ) -> bool {
+        return hilight_disabled || entries[idx].enabled;
+    };
+
+    if( fentries.empty() ) {
+        vshift = 0;
+        previewing = selected = -1;
+        fselected = -1;
+    } else {
+        // Keep current selection if still visible and selectable.
+        auto it = std::find( fentries.begin(), fentries.end(), selected );
+        if( it != fentries.end() && entry_is_selectable( *it ) ) {
+            fselected = static_cast<int>( std::distance( fentries.begin(), it ) );
+        } else if( use_fuzzy && do_filter ) {
+            // For fuzzy filtering, default to the best match.
+            for( size_t pos = 0; pos < fentries.size(); pos++ ) {
+                if( entry_is_selectable( fentries[pos] ) ) {
+                    fselected = static_cast<int>( pos );
+                    break;
                 }
             }
-            f++;
-        }
-    }
-    if( fselected == -1 ) {
-        fselected = 0;
-        vshift = 0;
-        if( fentries.empty() ) {
-            selected = -1;
+            if( fselected == -1 ) {
+                fselected = 0;
+            }
+            vshift = 0;
         } else {
-            previewing = selected = fentries [ 0 ];
+            // For normal substring filtering, choose an enabled entry near the previous selection.
+            for( size_t pos = 0; pos < fentries.size(); pos++ ) {
+                if( entry_is_selectable( fentries[pos] ) && fentries[pos] >= selected ) {
+                    fselected = static_cast<int>( pos );
+                    break;
+                }
+            }
+            if( fselected == -1 ) {
+                for( size_t pos = 0; pos < fentries.size(); pos++ ) {
+                    if( entry_is_selectable( fentries[pos] ) ) {
+                        fselected = static_cast<int>( pos );
+                        break;
+                    }
+                }
+            }
+            if( fselected == -1 ) {
+                fselected = 0;
+            }
         }
-    } else if( fselected < static_cast<int>( fentries.size() ) ) {
+
         previewing = selected = fentries[fselected];
-    } else {
-        previewing = fselected = selected = -1;
     }
+
     // scroll to top of screen if all remaining entries fit the screen.
     if( static_cast<int>( fentries.size() ) <= vmax ) {
         vshift = 0;
@@ -601,7 +686,13 @@ void uilist::filterlist()
 
 void uilist::inputfilter()
 {
-    filter_popup = std::make_unique<string_input_popup_imgui>( 0, filter );
+    filter_popup = std::make_unique<string_input_popup_imgui>( 0, filter, _( "Filter" ) );
+    filter_popup->set_label( _( "Filter:" ) );
+    filter_popup->set_description(
+        _( "Type to filter the list.  Prefix with ~ to use fuzzy matching.\n"
+           "Example:  ~rng matches ring, orange, and wiring." ),
+        c_white );
+    filter_popup->set_identifier( "uilist_filter" );
     filter_popup->set_max_input_length( 256 );
     filter = filter_popup->query();
     if( filter_popup->cancelled() ) {
@@ -610,6 +701,7 @@ void uilist::inputfilter()
     filterlist();
     filter_popup.reset();
 }
+
 
 static ImVec2 calc_size( std::string_view line )
 {

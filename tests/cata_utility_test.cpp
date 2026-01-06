@@ -411,7 +411,38 @@ TEST_CASE( "lcmatch", "[utility][nogame]" )
     CHECK( lcmatch( "無効", "無效" ) == false );
 }
 
-TEST_CASE( "obscure_message", "[utility][nogame]" )
+TEST_CASE( "fuzzy_match_score", "[utility][nogame]" )
+{
+    CHECK( fuzzy_match_score( "anything", "" ).value() == 0 );
+
+    CHECK( fuzzy_match_score( "bo", "bo" ).has_value() );
+    CHECK( fuzzy_match_score( "Bo", "bo" ).has_value() );
+    CHECK_FALSE( fuzzy_match_score( "Bo", "bö" ).has_value() );
+    CHECK_FALSE( fuzzy_match_score( "Bo", "co" ).has_value() );
+
+    CHECK( fuzzy_match_score( "Bö", "bo" ).has_value() );
+    CHECK( fuzzy_match_score( "Bō", "bo" ).has_value() );
+    CHECK( fuzzy_match_score( "BÖ", "bo" ).has_value() );
+    CHECK( fuzzy_match_score( "BÖ", "bö" ).has_value() );
+    CHECK( fuzzy_match_score( "BŌ", "bo" ).has_value() );
+    CHECK( fuzzy_match_score( "BŌ", "bō" ).has_value() );
+    CHECK_FALSE( fuzzy_match_score( "Bō", "bö" ).has_value() );
+
+    const std::optional<int> score_exact = fuzzy_match_score( "abc", "abc" );
+    const std::optional<int> score_spaced = fuzzy_match_score( "a b c", "abc" );
+    REQUIRE( score_exact.has_value() );
+    REQUIRE( score_spaced.has_value() );
+    CHECK( *score_exact > *score_spaced );
+
+    const std::optional<int> score_prefix = fuzzy_match_score( "wire", "wi" );
+    const std::optional<int> score_word = fuzzy_match_score( "my wire", "wi" );
+    REQUIRE( score_prefix.has_value() );
+    REQUIRE( score_word.has_value() );
+    CHECK( *score_prefix > *score_word );
+}
+
+TEST_CASE( "obscure_message"
+, "[utility][nogame]" )
 {
     SECTION( "narrow fixed" ) {
         std::size_t index = 0;

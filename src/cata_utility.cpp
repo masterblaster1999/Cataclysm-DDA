@@ -120,6 +120,153 @@ bool lcmatch( const translation &str, std::string_view qry )
     return lcmatch( str.translated(), qry );
 }
 
+
+namespace
+{
+static bool is_fuzzy_word_separator( char32_t c )
+{
+    switch( c ) {
+        case U' ':
+        case U'\t':
+        case U'_':
+        case U'-':
+        case U'.':
+        case U'/':
+        case U'\\':
+        case U':':
+        case U';':
+        case U',':
+        case U'(':
+        case U')':
+        case U'[':
+        case U']':
+        case U'{':
+        case U'}':
+        case U'<':
+        case U'>':
+        case U'|':
+        case U'!':
+        case U'?':
+        case U'"':
+        case U'\'':
+            return true;
+        default:
+            return false;
+    }
+}
+
+static int fuzzy_bonus_for_position( std::u32string_view str, size_t pos )
+{
+    constexpr int start_bonus = 15;
+    constexpr int word_bonus = 10;
+
+    if( pos == 0 ) {
+        return start_bonus;
+    }
+    return is_fuzzy_word_separator( str[pos - 1] ) ? word_bonus : 0;
+}
+
+static std::optional<int> fuzzy_match_score_u32( std::u32string_view str, std::u32string_view qry )
+{
+    if( qry.empty() ) {
+        return 0;
+    }
+    if( qry.size() > str.size() ) {
+        return std::nullopt;
+    }
+
+    constexpr int neg_inf = std::numeric_limits<int>::min() / 4;
+    constexpr int match_score = 10;
+    constexpr int consecutive_bonus = 20;
+    constexpr int gap_penalty = -1;
+
+    const size_t m = qry.size();
+
+    std::vector<int> d( m, neg_inf );
+    std::vector<int> mscore( m, neg_inf );
+    std::vector<int> d_prev( m, neg_inf );
+    std::vector<int> m_prev( m, neg_inf );
+
+    int leading_gap_score = 0;
+    for( size_t i = 0; i < str.size(); i++ ) {
+        std::swap( d, d_prev );
+        std::swap( mscore, m_prev );
+        std::fill( d.begin(), d.end(), neg_inf );
+        std::fill( mscore.begin(), mscore.end(), neg_inf );
+
+        const int pos_bonus = fuzzy_bonus_for_position( str, i );
+
+        // j == 0 uses the leading gap score as the base.
+        if( str[i] == qry[0] ) {
+            d[0] = leading_gap_score + match_score + pos_bonus;
+        }
+        if( i > 0 && m_prev[0] != neg_inf ) {
+            mscore[0] = std::max( d[0], m_prev[0] + gap_penalty );
+        } else {
+            mscore[0] = d[0];
+        }
+
+        for( size_t j = 1; j < m; j++ ) {
+            if( str[i] == qry[j] ) {
+                int best = neg_inf;
+
+                if( i > 0 && m_prev[j - 1] != neg_inf ) {
+                    best = std::max( best, m_prev[j - 1] + match_score + pos_bonus );
+                }
+                if( i > 0 && d_prev[j - 1] != neg_inf ) {
+                    best = std::max( best, d_prev[j - 1] + match_score + consecutive_bonus + pos_bonus );
+                }
+                d[j] = best;
+            }
+
+            if( i > 0 && m_prev[j] != neg_inf ) {
+                mscore[j] = std::max( d[j], m_prev[j] + gap_penalty );
+            } else {
+                mscore[j] = d[j];
+            }
+        }
+
+        leading_gap_score += gap_penalty;
+    }
+
+    if( mscore[m - 1] == neg_inf ) {
+        return std::nullopt;
+    }
+    return mscore[m - 1];
+}
+} // namespace
+
+std::optional<int> fuzzy_match_score( std::string_view str, std::string_view qry )
+{
+    // It will be quite common for the query string to be empty.  Anything will
+    // match in that case, so short-circuit and avoid the expensive
+    // conversions.
+    if( qry.empty() ) {
+        return 0;
+    }
+
+    std::u32string u32_str = utf8_to_utf32( str );
+    std::u32string u32_qry = utf8_to_utf32( qry );
+    std::transform( u32_str.begin(), u32_str.end(), u32_str.begin(), u32_to_lowercase );
+    std::transform( u32_qry.begin(), u32_qry.end(), u32_qry.begin(), u32_to_lowercase );
+
+    // First try match their lowercase forms
+    if( std::optional<int> score = fuzzy_match_score_u32( u32_str, u32_qry ); score ) {
+        return score;
+    }
+    // Then try removing accents from str ONLY
+    std::for_each( u32_str.begin(), u32_str.end(), remove_accent );
+    if( std::optional<int> score = fuzzy_match_score_u32( u32_str, u32_qry ); score ) {
+        return score;
+    }
+    if( use_pinyin_search && pinyin::pinyin_match( u32_str, u32_qry ) ) {
+        // We can't easily score pinyin matches yet; return a minimal score so they sort last.
+        return 1;
+    }
+    return std::nullopt;
+}
+
+
 bool match_include_exclude( std::string_view text, std::string filter )
 {
     size_t iPos;

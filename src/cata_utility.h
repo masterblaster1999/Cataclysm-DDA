@@ -116,6 +116,23 @@ bool lcmatch( std::string_view str, std::string_view qry );
 bool lcmatch( const translation &str, std::string_view qry );
 
 /**
+ * Fuzzy match a query against a string, returning an optional match score.
+ *
+ * This implements a lightweight fuzzy matcher suitable for interactive UI filtering.
+ * A successful match requires that every character of qry appears in order within
+ * str (i.e. qry is a subsequence of str), but not necessarily contiguously.
+ *
+ * As with lcmatch(), this search is case insensitive and supports matching accented
+ * letters with a non-accented search key (e.g. "bo" matches "Bō", but "bö" does not).
+ *
+ * The returned score is only meaningful for relative ranking: higher scores are
+ * better matches. The exact numeric value is not a stable API.
+ *
+ * @return std::nullopt if no fuzzy match exists, otherwise an integer score.
+ */
+std::optional<int> fuzzy_match_score( std::string_view str, std::string_view qry );
+
+/**
  * Matches text case insensitive with the include/exclude rules of the filter
  *
  * Multiple includes/excludes are possible
