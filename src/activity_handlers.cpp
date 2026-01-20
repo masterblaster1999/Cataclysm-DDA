@@ -6,7 +6,6 @@
 #include <iterator>
 #include <memory>
 #include <optional>
-#include <queue>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -20,23 +19,15 @@
 #include "calendar.h"
 #include "cata_utility.h"
 #include "character.h"
-#include "character_attire.h"
-#include "character_id.h"
-#include "character_martial_arts.h"
 #include "clzones.h"
 #include "coordinates.h"
 #include "creature.h"
 #include "creature_tracker.h"
 #include "cuboid_rectangle.h"
 #include "debug.h"
-#include "dialogue.h"
-#include "effect_on_condition.h"
 #include "enums.h"
-#include "event.h"
-#include "event_bus.h"
 #include "fault.h"
 #include "flag.h"
-#include "game.h"
 #include "game_constants.h"
 #include "game_inventory.h"
 #include "iexamine.h"
@@ -48,34 +39,22 @@
 #include "itype.h"
 #include "iuse.h"
 #include "iuse_actor.h"
-#include "magic.h"
 #include "map.h"
-#include "map_iterator.h"
 #include "mapdata.h"
-#include "martialarts.h"
 #include "math_parser_diag_value.h"
 #include "memory_fast.h"
 #include "messages.h"
 #include "monster.h"
 #include "npc.h"
-#include "omdata.h"
-#include "overmap.h"
 #include "overmap_ui.h"
-#include "overmapbuffer.h"
 #include "pathfinding.h"
-#include "pimpl.h"
 #include "player_activity.h"
 #include "pocket_type.h"
 #include "point.h"
-#include "proficiency.h"
 #include "requirements.h"
 #include "ret_val.h"
-#include "rng.h"
 #include "skill.h"
-#include "sounds.h"
 #include "string_formatter.h"
-#include "talker.h"
-#include "text_snippets.h"
 #include "translation.h"
 #include "translations.h"
 #include "type_id.h"
@@ -86,14 +65,11 @@
 #include "vpart_position.h"
 #include "weather.h"
 
-static const activity_id ACT_ARMOR_LAYERS( "ACT_ARMOR_LAYERS" );
-static const activity_id ACT_ATM( "ACT_ATM" );
 static const activity_id ACT_DISMEMBER( "ACT_DISMEMBER" );
 static const activity_id ACT_FERTILIZE_PLOT( "ACT_FERTILIZE_PLOT" );
 static const activity_id ACT_FETCH_REQUIRED( "ACT_FETCH_REQUIRED" );
 static const activity_id ACT_FILL_LIQUID( "ACT_FILL_LIQUID" );
 static const activity_id ACT_FIND_MOUNT( "ACT_FIND_MOUNT" );
-static const activity_id ACT_HAND_CRANK( "ACT_HAND_CRANK" );
 static const activity_id ACT_HEATING( "ACT_HEATING" );
 static const activity_id ACT_MEND_ITEM( "ACT_MEND_ITEM" );
 static const activity_id ACT_MULTIPLE_BUTCHER( "ACT_MULTIPLE_BUTCHER" );
@@ -110,24 +86,16 @@ static const activity_id ACT_MULTIPLE_READ( "ACT_MULTIPLE_READ" );
 static const activity_id ACT_MULTIPLE_STUDY( "ACT_MULTIPLE_STUDY" );
 static const activity_id ACT_PULL_CREATURE( "ACT_PULL_CREATURE" );
 static const activity_id ACT_REPAIR_ITEM( "ACT_REPAIR_ITEM" );
-static const activity_id ACT_SOCIALIZE( "ACT_SOCIALIZE" );
-static const activity_id ACT_SPELLCASTING( "ACT_SPELLCASTING" );
 static const activity_id ACT_START_FIRE( "ACT_START_FIRE" );
 static const activity_id ACT_TIDY_UP( "ACT_TIDY_UP" );
 static const activity_id ACT_TOOLMOD_ADD( "ACT_TOOLMOD_ADD" );
-static const activity_id ACT_TRAIN( "ACT_TRAIN" );
-static const activity_id ACT_TRAIN_TEACHER( "ACT_TRAIN_TEACHER" );
 static const activity_id ACT_TRAVELLING( "ACT_TRAVELLING" );
-static const activity_id ACT_TREE_COMMUNION( "ACT_TREE_COMMUNION" );
 static const activity_id ACT_VEHICLE_DECONSTRUCTION( "ACT_VEHICLE_DECONSTRUCTION" );
 static const activity_id ACT_VEHICLE_REPAIR( "ACT_VEHICLE_REPAIR" );
 
 static const ammotype ammo_battery( "battery" );
 
-static const efftype_id effect_asocial_dissatisfied( "asocial_dissatisfied" );
 static const efftype_id effect_controlled( "controlled" );
-static const efftype_id effect_social_dissatisfied( "social_dissatisfied" );
-static const efftype_id effect_social_satisfied( "social_satisfied" );
 
 static const flag_id json_flag_IRREMOVABLE( "IRREMOVABLE" );
 static const flag_id json_flag_PSEUDO( "PSEUDO" );
@@ -147,17 +115,7 @@ static const itype_id itype_battery( "battery" );
 static const itype_id itype_pseudo_magazine( "pseudo_magazine" );
 static const itype_id itype_pseudo_magazine_mod( "pseudo_magazine_mod" );
 
-static const json_character_flag json_flag_ASOCIAL1( "ASOCIAL1" );
-static const json_character_flag json_flag_ASOCIAL2( "ASOCIAL2" );
-static const json_character_flag json_flag_SILENT_SPELL( "SILENT_SPELL" );
-static const json_character_flag json_flag_SOCIAL1( "SOCIAL1" );
-static const json_character_flag json_flag_SOCIAL2( "SOCIAL2" );
-
-static const morale_type morale_tree_communion( "morale_tree_communion" );
-
 static const skill_id skill_survival( "survival" );
-
-static const trait_id trait_SPIRITUAL( "SPIRITUAL" );
 
 static const zone_type_id zone_type_FARM_PLOT( "FARM_PLOT" );
 
@@ -167,7 +125,6 @@ const std::map< activity_id, std::function<void( player_activity *, Character * 
 activity_handlers::do_turn_functions = {
     { ACT_FILL_LIQUID, fill_liquid_do_turn },
     { ACT_START_FIRE, start_fire_do_turn },
-    { ACT_HAND_CRANK, hand_crank_do_turn },
     { ACT_MULTIPLE_FISH, multiple_fish_do_turn },
     { ACT_MULTIPLE_CONSTRUCTION, multiple_construction_do_turn },
     { ACT_MULTIPLE_MINE, multiple_mine_do_turn },
@@ -184,29 +141,21 @@ activity_handlers::do_turn_functions = {
     { ACT_VEHICLE_DECONSTRUCTION, vehicle_deconstruction_do_turn },
     { ACT_VEHICLE_REPAIR, vehicle_repair_do_turn },
     { ACT_MULTIPLE_CHOP_TREES, chop_trees_do_turn },
-    { ACT_ARMOR_LAYERS, armor_layers_do_turn },
-    { ACT_ATM, atm_do_turn },
     { ACT_REPAIR_ITEM, repair_item_do_turn },
     { ACT_TRAVELLING, travel_do_turn },
     { ACT_DISMEMBER, dismember_do_turn },
     { ACT_FIND_MOUNT, find_mount_do_turn },
-    { ACT_FERTILIZE_PLOT, fertilize_plot_do_turn },
-    { ACT_TREE_COMMUNION, tree_communion_do_turn }
+    { ACT_FERTILIZE_PLOT, fertilize_plot_do_turn }
 };
 
 const std::map< activity_id, std::function<void( player_activity *, Character * )> >
 activity_handlers::finish_functions = {
     { ACT_START_FIRE, start_fire_finish },
-    { ACT_TRAIN, train_finish },
-    { ACT_TRAIN_TEACHER, teach_finish },
     { ACT_REPAIR_ITEM, repair_item_finish },
     { ACT_HEATING, heat_item_finish },
     { ACT_MEND_ITEM, mend_item_finish },
     { ACT_TOOLMOD_ADD, toolmod_add_finish },
-    { ACT_SOCIALIZE, socialize_finish },
-    { ACT_ATM, atm_finish },
-    { ACT_PULL_CREATURE, pull_creature_finish },
-    { ACT_SPELLCASTING, spellcasting_finish }
+    { ACT_PULL_CREATURE, pull_creature_finish }
 };
 
 static void assign_multi_activity( Character &you, const player_activity &act )
@@ -560,159 +509,6 @@ void activity_handlers::start_fire_do_turn( player_activity *act, Character *you
     }
 }
 
-static bool magic_train( player_activity *act, Character *you )
-{
-    if( !you ) {
-        return false;
-    }
-    const spell_id &sp_id = spell_id( act->name );
-    if( sp_id.is_valid() ) {
-        const bool knows = you->magic->knows_spell( sp_id );
-        if( knows ) {
-            spell &studying = you->magic->get_spell( sp_id );
-            const int expert_multiplier = act->values.empty() ? 0 : act->values[0];
-            const int xp = roll_remainder( studying.exp_modifier( *you ) * expert_multiplier );
-            studying.gain_exp( *you, xp );
-            you->add_msg_player_or_npc( m_good, _( "You learn a little about the spell: %s" ),
-                                        _( "<npcname> learns a little about the spell: %s" ), sp_id->name );
-        } else {
-            you->magic->learn_spell( act->name, *you );
-            // you can decline to learn this spell , as it may lock you out of other magic.
-            if( you->magic->knows_spell( sp_id ) ) {
-                you->add_msg_player_or_npc( m_good, _( "You learn %s." ),
-                                            _( "<npcname> learns %s." ), sp_id->name.translated() );
-            } else {
-                act->set_to_null();
-            }
-        }
-        return true;
-    }
-    return false;
-}
-
-void activity_handlers::teach_finish( player_activity *act, Character *you )
-{
-    const skill_id sk( act->name );
-    const proficiency_id pr( act->name );
-    const matype_id ma( act->name );
-    const spell_id sp( act->name );
-
-    std::string subject;
-    if( sk.is_valid() ) {
-        subject = sk->name();
-    } else if( pr.is_valid() ) {
-        subject = pr->name();
-    } else if( ma.is_valid() ) {
-        subject = ma->name.translated();
-    } else if( sp.is_valid() ) {
-        subject = sp->name.translated();
-    } else {
-        debugmsg( "teach_finish without a valid skill or style or spell name" );
-    }
-
-    if( you->is_avatar() ) {
-        add_msg( m_good, _( "You finish teaching %s." ), subject );
-    } else {
-        add_msg( m_good, _( "%s finishes teaching %s." ), you->name, subject );
-    }
-
-    act->set_to_null();
-}
-
-void activity_handlers::train_finish( player_activity *act, Character *you )
-{
-    const std::vector<npc *> teachlist = g->get_npcs_if( [act]( const npc & n ) {
-        return n.getID().get_value() == act->index;
-    } );
-    Character *teacher = &get_player_character();
-    if( !teachlist.empty() ) {
-        teacher = teachlist.front();
-    }
-    if( teacher->activity.id() == ACT_TRAIN_TEACHER ) {
-        bool all_students_done = true;
-        g->get_npcs_if( [&]( const npc & n ) {
-            for( int st_id : teacher->activity.values ) {
-                if( n.getID().get_value() == st_id && n.activity.id() == ACT_TRAIN ) {
-                    all_students_done = false;
-                    break;
-                }
-            }
-            return false;
-        } );
-        if( all_students_done ) {
-            teacher->cancel_activity();
-        }
-    }
-
-    const skill_id sk( act->name );
-    if( sk.is_valid() ) {
-        const Skill &skill = sk.obj();
-        std::string skill_name = skill.name();
-        int old_skill_level = you->get_knowledge_level( sk );
-        you->practice( sk, 100, old_skill_level + 2 );
-        int new_skill_level = you->get_knowledge_level( sk );
-        if( old_skill_level != new_skill_level ) {
-            if( you->is_avatar() ) {
-                add_msg( m_good, _( "You finish training %s to level %d." ),
-                         skill_name, new_skill_level );
-            }
-            get_event_bus().send<event_type::gains_skill_level>( you->getID(), sk, new_skill_level );
-        } else if( you->is_avatar() ) {
-            add_msg( m_good, _( "You get some training in %s." ), skill_name );
-        }
-        act->set_to_null();
-        return;
-    }
-
-    const proficiency_id &proficiency = proficiency_id( act->name );
-    if( proficiency.is_valid() ) {
-        you->practice_proficiency( proficiency, 15_minutes );
-        if( you->is_avatar() ) {
-            add_msg( m_good, _( "You get some training in %s." ), proficiency->name() );
-        }
-        act->set_to_null();
-        return;
-    }
-
-    const matype_id &ma_id = matype_id( act->name );
-    if( ma_id.is_valid() ) {
-        const martialart &mastyle = ma_id.obj();
-        // Trained martial arts,
-        get_event_bus().send<event_type::learns_martial_art>( you->getID(), ma_id );
-        you->martial_arts_data->learn_style( mastyle.id, you->is_avatar() );
-    } else if( !magic_train( act, you ) ) {
-        debugmsg( "train_finish without a valid skill or style or spell name" );
-    }
-
-    act->set_to_null();
-}
-
-void activity_handlers::hand_crank_do_turn( player_activity *act, Character *you )
-{
-    // Hand-crank chargers seem to range from 2 watt (very common easily verified)
-    // to 10 watt (suspicious claims from some manufacturers) sustained output.
-    // It takes 2.4 minutes to produce 1kj at just slightly under 7 watts (25 kj per hour)
-    // time-based instead of speed based because it's a sustained activity
-    item &hand_crank_item = *act->targets.front();
-
-    int time_to_crank = to_seconds<int>( 144_seconds );
-    // Modify for weariness
-    time_to_crank /= you->exertion_adjusted_move_multiplier( act->exertion_level() );
-    if( calendar::once_every( time_duration::from_seconds( time_to_crank ) ) ) {
-        if( hand_crank_item.ammo_capacity( ammo_battery ) > hand_crank_item.ammo_remaining( ) ) {
-            hand_crank_item.ammo_set( itype_battery, hand_crank_item.ammo_remaining( ) + 1 );
-        } else {
-            act->moves_left = 0;
-            add_msg( m_info, _( "You've charged the battery completely." ) );
-        }
-    }
-    if( you->get_sleepiness() >= sleepiness_levels::DEAD_TIRED ) {
-        act->moves_left = 0;
-        add_msg( m_info, _( "You're too exhausted to keep cranking." ) );
-    }
-
-}
-
 enum class repeat_type : int {
     // INIT should be zero. In some scenarios (vehicle welder), activity value default to zero.
     INIT = 0,       // Haven't found repeat value yet.
@@ -1046,16 +842,16 @@ void repair_item_finish( player_activity *act, Character *you, bool no_menu )
         }
 
         title += used_tool->is_tool() && used_tool->has_flag( flag_USES_NEARBY_AMMO )
-                 ? string_format( _( "Charges: <color_light_blue>%s</color> %s (%s per use)\n" ),
+                 ? string_format( _( "Charges: <color_light_blue>%d</color> %s (%d per use)\n" ),
                                   ammo_remaining,
                                   ammo_name,
                                   used_tool->ammo_required() )
-                 : string_format( _( "Charges: <color_light_blue>%s/%s</color> %s (%s per use)\n" ),
+                 : string_format( _( "Charges: <color_light_blue>%d/%d</color> %s (%d per use)\n" ),
                                   ammo_remaining, used_tool->ammo_capacity( current_ammo, true ),
                                   ammo_name,
                                   used_tool->ammo_required() );
         title += string_format( _( "Materials available: %s\n" ), string_join( material_list, ", " ) );
-        title += string_format( _( "Skill used: <color_light_blue>%s (%s)</color>\n" ),
+        title += string_format( _( "Skill used: <color_light_blue>%s (%d)</color>\n" ),
                                 actor->used_skill.obj().name(), level );
         title += string_format( _( "Success chance: <color_light_blue>%.1f</color>%%\n" ),
                                 100.0f * chance.first );
@@ -1256,17 +1052,6 @@ void activity_handlers::travel_do_turn( player_activity *act, Character *you )
     act->set_to_null();
 }
 
-void activity_handlers::armor_layers_do_turn( player_activity *, Character *you )
-{
-    you->cancel_activity();
-    you->worn.sort_armor( *you );
-}
-
-void activity_handlers::atm_do_turn( player_activity *, Character *you )
-{
-    iexamine::atm( *you, you->pos_bub() );
-}
-
 void activity_handlers::repair_item_do_turn( player_activity *act, Character *you )
 {
     // Moves are decremented based on a combination of speed and good vision (not in the dark, farsighted, etc)
@@ -1329,12 +1114,6 @@ void activity_handlers::find_mount_do_turn( player_activity *act, Character *you
             you->set_destination( route, player_activity( ACT_FIND_MOUNT ) );
         }
     }
-}
-
-void activity_handlers::socialize_finish( player_activity *act, Character *you )
-{
-    you->add_msg_if_player( _( "%s finishes chatting with you." ), act->str_values[0] );
-    act->set_to_null();
 }
 
 void activity_handlers::tidy_up_do_turn( player_activity *act, Character *you )
@@ -1415,14 +1194,6 @@ void activity_handlers::multiple_farm_do_turn( player_activity *act, Character *
 void activity_handlers::fetch_do_turn( player_activity *act, Character *you )
 {
     generic_multi_activity_handler( *act, *you );
-}
-
-void activity_handlers::atm_finish( player_activity *act, Character * )
-{
-    // ATM sets index to 0 to indicate it's finished.
-    if( !act->index ) {
-        act->set_to_null();
-    }
 }
 
 template<typename fn>
@@ -1544,178 +1315,4 @@ void activity_handlers::pull_creature_finish( player_activity *act, Character *y
         you->longpull( act->name, get_map().get_bub( act->placement ) );
     }
     act->set_to_null();
-}
-
-void activity_handlers::tree_communion_do_turn( player_activity *act, Character *you )
-{
-    // There's an initial rooting process.
-    if( act->values.front() > 0 ) {
-        act->values.front() -= 1;
-        if( act->values.front() == 0 ) {
-            if( you->has_trait( trait_id( trait_SPIRITUAL ) ) ) {
-                you->add_msg_if_player( m_good, _( "The ancient tree spirits answer your call." ) );
-            } else {
-                you->add_msg_if_player( m_good, _( "Your communion with the trees has begun." ) );
-            }
-        }
-        return;
-    }
-    // Information is received every minute.
-    if( !calendar::once_every( 1_minutes ) ) {
-        return;
-    }
-    // Breadth-first search forest tiles until one reveals new overmap tiles.
-    std::queue<tripoint_abs_omt> q;
-    std::unordered_set<tripoint_abs_omt> seen;
-    tripoint_abs_omt loc = you->pos_abs_omt();
-    q.push( loc );
-    seen.insert( loc );
-    const std::function<bool( const oter_id & )> filter = []( const oter_id & ter ) {
-        // FIXME: this is terrible and should be a property instead of a name check...
-        return ter.obj().is_wooded() || ter.obj().get_name( om_vision_level::full ) == _( "field" );
-    };
-    while( !q.empty() ) {
-        tripoint_abs_omt tpt = q.front();
-        if( overmap_buffer.reveal( tpt, 3, filter ) ) {
-            if( you->has_trait( trait_SPIRITUAL ) ) {
-                you->add_morale( morale_tree_communion, 2, 30, 8_hours, 6_hours );
-            } else {
-                you->add_morale( morale_tree_communion, 1, 15, 2_hours, 1_hours );
-            }
-            if( one_in( 128 ) ) {
-                if( one_in( 256 ) ) {
-                    if( you->has_effect( effect_social_dissatisfied ) ) {
-                        you->remove_effect( effect_social_dissatisfied );
-                    }
-                    if( ( you->has_flag( json_flag_SOCIAL1 ) || you->has_flag( json_flag_SOCIAL2 ) ) &&
-                        !you->has_effect( effect_social_satisfied ) ) {
-                        you->add_effect( effect_social_satisfied, 3_hours, false, 1 );
-                    }
-                    if( ( you->has_flag( json_flag_ASOCIAL1 ) || you->has_flag( json_flag_ASOCIAL2 ) ) &&
-                        !you->has_effect( effect_asocial_dissatisfied ) ) {
-                        you->add_effect( effect_asocial_dissatisfied, 3_hours, false, 1 );
-                    }
-                }
-                you->add_msg_if_player( "%s", SNIPPET.random_from_category( "tree_communion" ).value_or(
-                                            translation() ) );
-            }
-            return;
-        }
-        for( const tripoint_abs_omt &neighbor : points_in_radius( tpt, 1 ) ) {
-            if( seen.find( neighbor ) != seen.end() ) {
-                continue;
-            }
-            seen.insert( neighbor );
-            if( !overmap_buffer.ter( neighbor ).obj().is_wooded() ) {
-                continue;
-            }
-            q.push( neighbor );
-        }
-        q.pop();
-    }
-    you->add_msg_if_player( m_info, _( "The trees have shown you what they will." ) );
-    act->set_to_null();
-}
-
-void activity_handlers::spellcasting_finish( player_activity *act, Character *you )
-{
-    act->set_to_null();
-    const int level_override = act->get_value( 0 );
-    spell_id sp( act->name );
-
-    // if level is -1 then we know it's a player spell, otherwise we build it from the ground up
-    spell temp_spell( sp );
-    spell &spell_being_cast = ( level_override == -1 ) ? you->magic->get_spell( sp ) : temp_spell;
-
-    // if level != 1 then we need to set the spell's level
-    if( level_override != -1 ) {
-        spell_being_cast.set_level( *you, level_override );
-    }
-
-    // choose target for spell before continuing
-    const std::optional<tripoint_bub_ms> target = act->coords.empty() ? spell_being_cast.select_target(
-                you ) : get_map().get_bub( act->coords.front() );
-    if( target ) {
-        // npcs check for target viability
-        if( !you->is_npc() || spell_being_cast.is_valid_target( *you, *target ) ) {
-            // no turning back now. it's all said and done.
-            bool success = act->get_value( 1 ) == 1 ||
-                           rng_float( 0.0f, 1.0f ) >= spell_being_cast.spell_fail( *you );
-            int exp_gained = spell_being_cast.casting_exp( *you );
-            if( !success ) {
-                you->add_msg_if_player( game_message_params{ m_bad, gmf_bypass_cooldown },
-                                        _( "You lose your concentration!" ) );
-                if( !spell_being_cast.is_max_level( *you ) && level_override == -1 ) {
-                    // still get some experience for trying
-                    exp_gained *= spell_being_cast.get_failure_exp_percent( *you );
-                    spell_being_cast.gain_exp( *you, exp_gained );
-                }
-                if( act->get_value( 2 ) != 0 ) {
-                    spell_being_cast.consume_spell_cost( *you, false );
-                }
-                dialogue d( get_talker_for( you ), nullptr );
-                std::vector<effect_on_condition_id> failure_eocs = spell_being_cast.get_failure_eoc_ids();
-                for( effect_on_condition_id failure_eoc : failure_eocs ) {
-                    failure_eoc->activate( d );
-                }
-                get_event_bus().send<event_type::spellcasting_finish>( you->getID(), false, sp,
-                        spell_being_cast.spell_class(), spell_being_cast.get_difficulty( *you ),
-                        spell_being_cast.energy_cost( *you ), spell_being_cast.casting_time( *you ),
-                        spell_being_cast.damage( *you ) );
-                return;
-            }
-
-            if( spell_being_cast.has_flag( spell_flag::VERBAL ) && !you->has_flag( json_flag_SILENT_SPELL ) ) {
-                sounds::sound( you->pos_bub(), you->get_shout_volume() / 2, sounds::sound_t::speech,
-                               _( "cast a spell" ),
-                               false );
-            }
-
-            you->add_msg_if_player( spell_being_cast.message(), spell_being_cast.name() );
-
-            // this is here now so that the spell first consume its components then casts its effects, necessary to cast
-            // spells with the components in hand.
-            spell_being_cast.use_components( *you );
-
-            if( act->get_value( 2 ) != 0 ) {
-                spell_being_cast.consume_spell_cost( *you, true );
-            }
-
-            if( !act->targets.empty() ) {
-                item *it = act->targets.front().get_item();
-                if( it != nullptr && it->has_flag( flag_SINGLE_USE ) ) {
-                    you->i_rem( it );
-                    act->targets.erase( act->targets.end() - 1 );
-                } else if( it && !it->has_flag( flag_USE_PLAYER_ENERGY ) ) {
-                    you->consume_charges( *it, it->type->charges_to_use() );
-                }
-            }
-
-            spell_being_cast.cast_all_effects( *you, *target );
-
-            if( level_override == -1 ) {
-                if( !spell_being_cast.is_max_level( *you ) ) {
-                    // reap the reward
-                    int old_level = spell_being_cast.get_level();
-                    if( old_level == 0 ) {
-                        spell_being_cast.gain_level( *you );
-                        you->add_msg_if_player( m_good,
-                                                _( "Something about how this spell works just clicked!  You gained a level!" ) );
-                    } else {
-                        spell_being_cast.gain_exp( *you, exp_gained );
-                    }
-                    if( spell_being_cast.get_level() != old_level ) {
-                        // Level 0-1 message is printed above - notify player when leveling up further
-                        if( old_level > 0 ) {
-                            you->add_msg_if_player( m_good, _( "You gained a level in %s!" ), spell_being_cast.name() );
-                        }
-                    }
-                }
-            }
-            get_event_bus().send<event_type::spellcasting_finish>( you->getID(), true, sp,
-                    spell_being_cast.spell_class(), spell_being_cast.get_difficulty( *you ),
-                    spell_being_cast.energy_cost( *you ), spell_being_cast.casting_time( *you ),
-                    spell_being_cast.damage( *you ) );
-        }
-    }
 }

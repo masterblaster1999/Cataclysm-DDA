@@ -1578,7 +1578,6 @@ These flags apply to the `use_action` field, instead of the `flags` field.
 - ```MATCHBOMB``` Light the matchbomb.
 - ```MILITARYMAP``` Learn of local military installations, and show roads.
 - ```MININUKE``` Set the timer and run.  Or hit with a hammer (not really).
-- ```MOLOTOV_LIT``` Throw it, but don't drop it.
 - ```MOLOTOV``` Light the Molotov cocktail.
 - ```MOP``` Mop up the mess.
 - ```NOISE_EMITTER_OFF``` Turn the noise emitter on.
@@ -1706,6 +1705,8 @@ Note: Vehicle parts requiring other parts is defined by setting a `requires_flag
 - ```FREEZER``` Can freeze items in below zero degrees Celsius temperature.
 - ```FRIDGE``` Can refrigerate items.
 - ```FUNNEL``` If installed over a vehicle tank, can collect rainwater during rains.
+- ```FURNITURE_LIFT_ASSIST``` This part has bonus effective strength when 'e'xamining it to load furniture onto it. Requires the part to also be FURNITURE_TIEDOWN. Bonus is currently set to 5.
+- ```FURNITURE_TIEDOWN``` This part can have furniture loaded onto it. Requires the part to also be CARGO.
 - ```HALF_CIRCLE_LIGHT``` Projects a directed half-circular radius of light when turned on.
 - ```HANDHELD_BATTERY_MOUNT``` Same as `BATTERY_MOUNT`, but for handheld battery mount.
 - ```HARNESS_bodytype``` Replace bodytype with `any` to accept any type, or with the targeted type.

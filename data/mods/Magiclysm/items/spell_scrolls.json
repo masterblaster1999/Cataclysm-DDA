@@ -1095,21 +1095,21 @@
     "type": "ITEM",
     "subtypes": [ "BOOK" ],
     "copy-from": "spell_scroll",
-    "id": "spell_scroll_holy_blade",
-    "//": "Technomancer spell",
-    "name": { "str": "Scroll of Holy Blade", "str_pl": "Scrolls of Holy Blade" },
-    "description": "This blade of light will cut through any evil it makes contact with!",
-    "use_action": { "type": "learn_spell", "spells": [ "holy_blade" ] }
+    "id": "spell_scroll_magus_mage_conjured_blade",
+    "//": "Magus spell",
+    "name": { "str": "Scroll of Force Blade", "str_pl": "Scrolls of Force Blade" },
+    "description": "Conjure up a sword made of force, sharper than any physical blade.",
+    "use_action": { "type": "learn_spell", "spells": [ "magus_mage_conjured_blade" ] }
   },
   {
     "type": "ITEM",
     "subtypes": [ "BOOK" ],
     "copy-from": "spell_scroll",
-    "id": "spell_scroll_spirit_armor",
-    "//": "Technomancer spell",
-    "name": { "str": "Scroll of Spiritual Armor", "str_pl": "Scrolls of Spiritual Armor" },
-    "description": "Evil will not make it through your defenses if your faith is strong enough!",
-    "use_action": { "type": "learn_spell", "spells": [ "spirit_armor" ] }
+    "id": "spell_scroll_magus_mage_conjured_armor",
+    "//": "Magus spell",
+    "name": { "str": "Scroll of Force Armor", "str_pl": "Scrolls of Force Armor" },
+    "description": "Conjure a suit of magical armor made of pure force, when you need armor in a hurry.",
+    "use_action": { "type": "learn_spell", "spells": [ "magus_mage_conjured_armor" ] }
   },
   {
     "type": "ITEM",
@@ -2488,5 +2488,15 @@
     "name": { "str": "Scroll of Monstrous Grasp", "str_pl": "Scrolls of Monstrous Grasp" },
     "description": "Extend a tentacle to grab an item and drag it back to you.  Disgusting but practical.",
     "use_action": { "type": "learn_spell", "spells": [ "biomancer_pull_items_from_distance" ] }
+  },
+  {
+    "type": "ITEM",
+    "subtypes": [ "BOOK" ],
+    "copy-from": "spell_scroll",
+    "id": "spell_scroll_technomancer_arete_buff_spell",
+    "//": "Technomancer spell",
+    "name": { "str": "Scroll of Arete", "str_pl": "Scrolls of Arete" },
+    "description": "Become the best you that it's possible to be.",
+    "use_action": { "type": "learn_spell", "spells": [ "technomancer_arete_buff_spell" ] }
   }
 ]

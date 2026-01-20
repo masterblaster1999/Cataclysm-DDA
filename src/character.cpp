@@ -403,7 +403,9 @@ void Character::queue_effect( const std::string &name, const time_duration &dela
                               const time_duration &effect_duration )
 {
 #pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#ifndef __clang__
+# pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     global_variables::impl_t ctx = {
         { "effect", diag_value{ name } },
         { "duration", diag_value{ to_turns<int>( effect_duration ) } }
@@ -1824,6 +1826,8 @@ void Character::on_dodge( Creature *source, float difficulty, float training_lev
     }
     martial_arts_data->ma_ondodge_effects( *this );
 
+    magic->break_channeling( *this );
+
     // For adjacent attackers check for techniques usable upon successful dodge
     if( source && square_dist( pos_bub(), source->pos_bub() ) == 1 ) {
         matec_id tec = std::get<0>( pick_technique( *source, used_weapon(), false, true, false ) );
@@ -3150,6 +3154,9 @@ void Character::calc_bmi_encumb( std::map<bodypart_id, encumbrance_data> &vals )
     for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
         int penalty = std::floor( elem.second.get_bmi_encumbrance_scalar() * std::max( 0.0f,
                                   get_bmi_fat() - static_cast<float>( elem.second.get_bmi_encumbrance_threshold() ) ) );
+        if( !needs_food() ) {
+            penalty = 0;
+        }
         vals[elem.first.id()].encumbrance += penalty;
     }
 }
@@ -8048,6 +8055,7 @@ void Character::pause()
     }
     // on-pause effects for martial arts
     martial_arts_data->ma_onpause_effects( *this );
+    magic->channel_magic( *this );
 
     if( is_npc() ) {
         // The stuff below doesn't apply to NPCs
